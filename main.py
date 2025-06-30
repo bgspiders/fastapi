@@ -4,7 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from typing import Dict, Any
 import json
-from datetime import datetime
+from datetime import datetime, date
+import calendar
+from holiday_loader import holiday_loader
 
 app = FastAPI(
     title="API信息查看平台",
@@ -20,6 +22,84 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def get_time_info() -> Dict[str, Any]:
+    """获取详细的时间信息"""
+    now = datetime.now()
+    today = now.date()
+    
+    # 使用新的节假日加载器
+    holiday_info = holiday_loader.get_holiday_info(today)
+    
+    # 获取农历信息（简化版）
+    lunar_info = get_lunar_date(today)
+    
+    return {
+        "timestamp": now.isoformat(),
+        "date": today.strftime("%Y-%m-%d"),
+        "time": now.strftime("%H:%M:%S"),
+        "timezone": "Asia/Shanghai",
+        "weekday": holiday_info["weekday"],
+        "year": now.year,
+        "month": now.month,
+        "day": now.day,
+        "hour": now.hour,
+        "minute": now.minute,
+        "second": now.second,
+        "microsecond": now.microsecond,
+        "is_holiday": holiday_info["is_holiday"],
+        "is_workday": holiday_info["is_workday"],
+        "holiday_name": holiday_info["holiday_name"],
+        "holiday_type": holiday_info["holiday_type"],
+        "holiday_source": holiday_info["source"],
+        "lunar_date": lunar_info,
+        "season": get_season(now.month),
+        "quarter": (now.month - 1) // 3 + 1,
+        "day_of_year": now.timetuple().tm_yday,
+        "week_of_year": now.isocalendar()[1]
+    }
+
+def get_lunar_date(solar_date: date) -> Dict[str, Any]:
+    """获取农历日期信息（简化版）"""
+    # 这里使用简化的农历计算，实际项目中可以使用专门的农历库
+    # 如 chinese_calendar 或 lunar_python
+    
+    # 简化实现：返回基本信息
+    return {
+        "lunar_year": "甲辰年",  # 2024年
+        "lunar_month": "五月",
+        "lunar_day": "十五",
+        "zodiac": "龙",
+        "festival": get_lunar_festival(solar_date)
+    }
+
+def get_lunar_festival(solar_date: date) -> str:
+    """获取农历节日"""
+    month = solar_date.month
+    day = solar_date.day
+    
+    festivals = {
+        (1, 1): "元旦",
+        (2, 10): "春节",
+        (4, 4): "清明节",
+        (5, 1): "劳动节",
+        (6, 10): "端午节",
+        (9, 15): "中秋节",
+        (10, 1): "国庆节",
+    }
+    
+    return festivals.get((month, day), "")
+
+def get_season(month: int) -> str:
+    """获取季节"""
+    if month in [3, 4, 5]:
+        return "春季"
+    elif month in [6, 7, 8]:
+        return "夏季"
+    elif month in [9, 10, 11]:
+        return "秋季"
+    else:
+        return "冬季"
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -138,6 +218,12 @@ async def root():
                 </div>
                 
                 <div class="endpoint">
+                    <span class="method">GET</span> <span class="url">/time</span>
+                    <div class="description">获取时间信息和节假日判断</div>
+                    <button class="test-button" onclick="testEndpoint('/time')">测试接口</button>
+                </div>
+                
+                <div class="endpoint">
                     <span class="method">POST</span> <span class="url">/echo</span>
                     <div class="description">回显POST请求的数据</div>
                     <button class="test-button" onclick="testPostEndpoint()">测试接口</button>
@@ -153,10 +239,10 @@ async def root():
     "headers": {
         "user-agent": "Mozilla/5.0...",
         "accept": "application/json",
-        "host": "localhost:8000"
+        "host": "localhost:8080"
     },
     "method": "GET",
-    "url": "http://localhost:8000/info"
+    "url": "http://localhost:8080/info"
 }
                 </pre>
             </div>
@@ -255,6 +341,89 @@ async def get_user_agent(request: Request):
         "parsed_info": parse_user_agent(user_agent)
     }
 
+@app.get("/time")
+async def get_time():
+    """获取时间信息和节假日判断"""
+    return get_time_info()
+
+@app.get("/time/{date_str}")
+async def get_time_by_date(date_str: str):
+    """根据指定日期获取时间信息和节假日判断"""
+    try:
+        # 解析日期字符串
+        check_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        now = datetime.now()
+        
+        # 获取节假日信息
+        holiday_info = holiday_loader.get_holiday_info(check_date)
+        
+        # 获取农历信息
+        lunar_info = get_lunar_date(check_date)
+        
+        return {
+            "query_date": date_str,
+            "current_time": now.isoformat(),
+            "date": check_date.strftime("%Y-%m-%d"),
+            "weekday": {
+                "number": check_date.weekday(),
+                "name": ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][check_date.weekday()],
+                "english": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][check_date.weekday()]
+            },
+            "is_holiday": holiday_info["is_holiday"],
+            "is_workday": holiday_info["is_workday"],
+            "holiday_name": holiday_info["holiday_name"],
+            "holiday_type": holiday_info["holiday_type"],
+            "holiday_source": holiday_info["source"],
+            "lunar_date": lunar_info,
+            "season": get_season(check_date.month),
+            "quarter": (check_date.month - 1) // 3 + 1,
+            "day_of_year": check_date.timetuple().tm_yday,
+            "week_of_year": check_date.isocalendar()[1]
+        }
+    except ValueError:
+        raise HTTPException(status_code=400, detail="日期格式错误，请使用 YYYY-MM-DD 格式")
+
+@app.get("/holiday/years")
+async def get_available_years():
+    """获取可用的节假日数据年份"""
+    return {
+        "available_years": holiday_loader.get_available_years(),
+        "total_years": len(holiday_loader.get_available_years())
+    }
+
+@app.get("/holiday/{year}")
+async def get_year_holidays(year: int):
+    """获取指定年份的所有节假日信息"""
+    try:
+        holidays = holiday_loader.get_year_holidays(year)
+        return {
+            "year": year,
+            "total_days": len(holidays),
+            "holidays": holidays,
+            "holiday_count": len([h for h in holidays if h["is_holiday"]]),
+            "workday_count": len([h for h in holidays if h["is_workday"]])
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"获取节假日数据失败: {str(e)}")
+
+@app.get("/holiday/check/{date_str}")
+async def check_holiday(date_str: str):
+    """检查指定日期是否为节假日"""
+    try:
+        check_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        holiday_info = holiday_loader.is_holiday(check_date)
+        
+        return {
+            "date": date_str,
+            "is_holiday": holiday_info["is_holiday"],
+            "is_workday": holiday_info["is_workday"],
+            "holiday_name": holiday_info["holiday_name"],
+            "type": holiday_info["type"],
+            "source": holiday_info["source"]
+        }
+    except ValueError:
+        raise HTTPException(status_code=400, detail="日期格式错误，请使用 YYYY-MM-DD 格式")
+
 @app.post("/echo")
 async def echo_request(request: Request):
     """回显POST请求的数据"""
@@ -348,7 +517,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
+        port=8080,
         reload=True,
         log_level="info"
     ) 

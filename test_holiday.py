@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-API信息查看平台测试脚本
+节假日功能测试脚本
 """
 
 import requests
 import json
-import time
+from datetime import date, timedelta
 
 BASE_URL = "http://localhost:8080"
 
@@ -36,45 +36,42 @@ def test_endpoint(endpoint, method="GET", data=None):
 
 def main():
     """主测试函数"""
-    print("🧪 API信息查看平台测试")
+    print("🎉 节假日功能测试")
     print("=" * 50)
     
-    # 测试各个端点
-    endpoints = [
-        ("/info", "GET"),
-        ("/ip", "GET"),
-        ("/headers", "GET"),
-        ("/user-agent", "GET"),
-        ("/time", "GET"),
+    # 测试可用年份
+    test_endpoint("/holiday/years")
+    
+    # 测试节假日检查
+    test_dates = [
+        "2024-01-01",  # 元旦
+        "2024-02-10",  # 春节
+        "2024-02-04",  # 春节调休
+        "2024-05-01",  # 劳动节
+        "2024-10-01",  # 国庆节
+        "2024-12-25",  # 圣诞节（非中国法定节假日）
+        "2024-12-28",  # 普通工作日
+        "2024-12-29",  # 周末
     ]
     
-    for endpoint, method in endpoints:
-        test_endpoint(endpoint, method)
-        time.sleep(1)  # 避免请求过快
+    print("\n📅 测试节假日检查:")
+    for test_date in test_dates:
+        test_endpoint(f"/holiday/check/{test_date}")
+    
+    # 测试时间接口（包含节假日信息）
+    print("\n⏰ 测试时间接口:")
+    test_endpoint("/time")
     
     # 测试指定日期的时间接口
-    test_dates = [
-        "/time/2024-01-01",  # 元旦
-        "/time/2024-02-10",  # 春节
-        "/time/2024-02-04",  # 春节调休
-        "/time/2024-05-01",  # 劳动节
-        "/time/2024-10-01",  # 国庆节
-    ]
-    
     print("\n📅 测试指定日期的时间接口:")
-    for date_endpoint in test_dates:
-        test_endpoint(date_endpoint, "GET")
-        time.sleep(0.5)
+    for test_date in test_dates[:3]:  # 只测试前3个日期
+        test_endpoint(f"/time/{test_date}")
     
-    # 测试POST端点
-    test_data = {
-        "message": "Hello from test script!",
-        "timestamp": time.time(),
-        "test": True
-    }
-    test_endpoint("/echo", "POST", test_data)
+    # 测试年份节假日数据
+    print("\n📊 测试年份节假日数据:")
+    test_endpoint("/holiday/2024")
     
-    print("\n✅ 测试完成!")
+    print("\n✅ 节假日功能测试完成!")
     print(f"🌐 访问主页: {BASE_URL}")
     print(f"📖 查看API文档: {BASE_URL}/docs")
 
